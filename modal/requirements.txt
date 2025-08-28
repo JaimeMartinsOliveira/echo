@@ -1,0 +1,5 @@
+whisperx
+whisperx[torch]
+torch
+pyannote.audio
+requests
