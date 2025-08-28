@@ -1,16 +1,7 @@
-import os
-import openai
+from transformers import pipeline
 
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
-openai.api_key = os.getenv('OPENAI_API_KEY')
-
-
-def generate_summary(transcript: str, mode: str = 'meeting') -> str:
-prompt = f"Resuma o texto abaixo gerando:\n- Principais pontos\n- Decisões\n- Ações com responsáveis\n\nTranscrição:\n{transcript}\n"
-# Use o endpoint de Chat Completions / Responses dependendo do SDK
-response = openai.ChatCompletion.create(
-model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
-messages=[{"role": "user", "content": prompt}],
-max_tokens=800,
-)
-return response['choices'][0]['message']['content']
+def summarize_text(text: str, max_length: int = 150) -> str:
+    summary = summarizer(text, max_length=max_length, min_length=30, do_sample=False)
+    return summary[0]['summary_text']
