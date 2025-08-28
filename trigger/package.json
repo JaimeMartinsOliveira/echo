@@ -1,8 +1,17 @@
 {
-"name": "echo-trigger",
-"version": "0.0.1",
-"dependencies": {
-"express": "^4.18.2",
-"node-fetch": "^3.3.1"
-}
+  "name": "echo-trigger",
+  "version": "1.0.0",
+  "description": "Trigger.dev integration for Echo app",
+  "main": "index.js",
+  "scripts": {
+    "dev": "trigger dev",
+    "build": "trigger build",
+    "start": "trigger start"
+  },
+  "devDependencies": {
+    "@trigger.dev/cli": "^3.3.12"
+  },
+  "dependencies": {
+    "@trigger.dev/sdk": "^4.0.1"
+  }
 }
