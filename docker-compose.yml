@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+backend:
+build: ./backend
+ports:
+- "8000:8000"
+environment:
+- TRIGGER_ENDPOINT=http://trigger:3000/start
+- TRIGGER_KEY=changeme
+- OPENAI_API_KEY=${OPENAI_API_KEY}
+volumes:
+- ./backend:/app
+trigger:
+build: ./trigger
+ports:
+- "3000:3000"
+environment:
+- MODAL_RUN_ENDPOINT=http://modal.local/run
+- MODAL_API_KEY=changeme
+volumes:
+- ./trigger:/usr/src/app
