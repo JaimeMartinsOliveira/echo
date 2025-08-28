@@ -1,20 +1,18 @@
-import os
-import requests
+import aiofiles
+import uuid
+from pathlib import Path
+from app.modal_worker import run_modal_task
 
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
-TRIGGER_ENDPOINT = os.getenv('TRIGGER_ENDPOINT') # ex: seu endpoint do Trigger.dev
-TRIGGER_KEY = os.getenv('TRIGGER_KEY')
+async def process_audio_job(file):
+    file_id = str(uuid.uuid4())
+    file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
 
+    async with aiofiles.open(file_path, "wb") as out_file:
+        content = await file.read()
+        await out_file.write(content)
 
-def trigger_job(file_id: str, filename: str):
-"""Faz uma requisição para o Trigger.dev para começar o pipeline.
-O Trigger pode então chamar o Modal para processar o arquivo.
-"""
-payload = {
-"file_id": file_id,
-"filename": filename,
-}
-headers = {"Authorization": f"Bearer {TRIGGER_KEY}"}
-resp = requests.post(f"{TRIGGER_ENDPOINT}/start", json=payload, headers=headers, timeout=10)
-resp.raise_for_status()
-return resp.json()
+    await run_modal_task(str(file_path))
+    return {"job_id": file_id, "status": "sent_to_modal"}
