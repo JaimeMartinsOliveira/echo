@@ -1,21 +1,30 @@
 version: '3.8'
+
 services:
-backend:
-build: ./backend
-ports:
-- "8000:8000"
-environment:
-- TRIGGER_ENDPOINT=http://trigger:3000/start
-- TRIGGER_KEY=changeme
-- OPENAI_API_KEY=${OPENAI_API_KEY}
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - TRIGGER_API_KEY=${TRIGGER_API_KEY}
+      - MODAL_TOKEN_ID=${MODAL_TOKEN_ID}
+      - MODAL_TOKEN_SECRET=${MODAL_TOKEN_SECRET}
+      - UPLOAD_DIR=/app/uploads
+      - MAX_FILE_SIZE=524288000  # 500MB
+      - APP_URL=https://your-app-url.com
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
 volumes:
-- ./backend:/app
-trigger:
-build: ./trigger
-ports:
-- "3000:3000"
-environment:
-- MODAL_RUN_ENDPOINT=http://modal.local/run
-- MODAL_API_KEY=changeme
-volumes:
-- ./trigger:/usr/src/app
+  redis_data:
