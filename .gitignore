@@ -1,6 +1,3 @@
-# ARQUIVO: .gitignore
-# CRIAR NA RAIZ DO PROJETO (mesmo nível do app.py)
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -25,13 +22,11 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual Environment
 .venv/
 venv/
 ENV/
 env/
 
-# Environment Variables
 .env
 .env.local
 .env.production
@@ -42,23 +37,20 @@ env/
 *.swp
 *.swo
 
-# Uploads and temp files
 uploads/
 downloads/
 temp/
 *.tmp
 
-# Logs
 logs/
 *.log
 
-# Database
 *.db
 *.sqlite3
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Docker
 .docker/
+.trigger
+node_modules
