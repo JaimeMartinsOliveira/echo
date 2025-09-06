@@ -4,18 +4,40 @@ from contextlib import asynccontextmanager
 import uvicorn
 from src.api.routes import upload, transcription, webhooks
 from src.services.trigger_client import TriggerClient
+from src.database.connection import create_db_and_tables
+import aioredis
 import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Inicializar banco de dados
+    create_db_and_tables()
+    print("✅ Database initialized")
+    
     # Inicializar conexões
     trigger_client = TriggerClient()
     app.state.trigger_client = trigger_client
+    
+    # Inicializar Redis (opcional)
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    try:
+        redis_client = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+        await redis_client.ping()
+        app.state.redis_client = redis_client
+        print("✅ Redis connected")
+    except Exception as e:
+        print(f"⚠️ Redis not available: {e}")
+        app.state.redis_client = None
+    
     yield
+    
     # Cleanup
+    if hasattr(app.state, 'redis_client') and app.state.redis_client:
+        await app.state.redis_client.close()
+    await trigger_client.close()
 
 app = FastAPI(
-    title="Transcription API",
+    title="Echo - Transcription API",
     description="API para transcrição de áudio/vídeo usando WhisperX",
     version="1.0.0",
     lifespan=lifespan
@@ -36,7 +58,7 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 @app.get("/")
 async def root():
-    return {"message": "Transcription API is running"}
+    return {"message": "Echo Transcription API is running"}
 
 @app.get("/health")
 async def health_check():
