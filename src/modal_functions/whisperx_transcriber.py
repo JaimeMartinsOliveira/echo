@@ -17,16 +17,15 @@ image = modal.Image.debian_slim().pip_install([
     "yt-dlp"
 ]).apt_install([
     "ffmpeg"
-])
+]).add_local_dir(".", remote_path="/app")
 
 app = modal.App("whisperx-transcriber")
 
 @app.function(
     image=image,
-    gpu=modal.gpu.T4(),  # GPU para melhor performance
+    gpu="T4",
     memory=8192,  # 8GB RAM
     timeout=1800,  # 30 minutos timeout
-    mounts=[modal.Mount.from_local_dir(".", remote_path="/app")]
 )
 async def transcribe_audio(
         job_id: str,

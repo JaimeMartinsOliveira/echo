@@ -18,7 +18,8 @@
   },
   "homepage": "https://github.com/JaimeMartinsOliveira/echo#readme",
   "dependencies": {
-    "@trigger.dev/sdk": "4.0.2"
+    "@trigger.dev/sdk": "4.0.2",
+    "modal": "^0.3.20"
   },
   "devDependencies": {
     "@trigger.dev/build": "4.0.2"

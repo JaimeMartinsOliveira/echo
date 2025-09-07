@@ -1,5 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
-import Modal from "@modal-labs/modal";
+import { modal } from "modal"
 
 const modal = new Modal({
   tokenId: process.env.MODAL_TOKEN_ID!,

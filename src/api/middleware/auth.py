@@ -1,5 +1,3 @@
-# ARQUIVO: src/api/middleware/auth.py
-# CRIAR ESTE ARQUIVO - ele não existe ainda
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
