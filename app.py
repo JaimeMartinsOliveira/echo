@@ -5,7 +5,7 @@ import uvicorn
 from src.api.routes import upload, transcription, webhooks
 from src.services.trigger_client import TriggerClient
 from src.database.connection import create_db_and_tables
-import aioredis
+import redis.asyncio as redis
 import os
 
 @asynccontextmanager
@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
     # Inicializar Redis (opcional)
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     try:
-        redis_client = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+        redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
         await redis_client.ping()
         app.state.redis_client = redis_client
         print("✅ Redis connected")
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     
     # Cleanup
     if hasattr(app.state, 'redis_client') and app.state.redis_client:
-        await app.state.redis_client.close()
+        await app.state.redis_client.aclose()
     await trigger_client.close()
 
 app = FastAPI(

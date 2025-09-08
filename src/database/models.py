@@ -31,7 +31,7 @@ class Job(Base):
 
     # Metadados e erros
     error_message = Column(Text, nullable=True)
-    metadata = Column(JSON, nullable=True, default=dict)
+    job_data = Column("metadata", JSON, nullable=True, default=dict)
 
     def to_dict(self):
         """Converte o modelo SQLAlchemy para dicionário"""
@@ -51,5 +51,5 @@ class Job(Base):
             "result_language": self.result_language,
             "duration": self.duration,
             "error_message": self.error_message,
-            "metadata": self.metadata or {}
+            "metadata": self.job_data or {}
         }

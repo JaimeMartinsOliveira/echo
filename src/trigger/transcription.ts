@@ -1,10 +1,4 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
-import { modal } from "modal"
-
-const modal = new Modal({
-  tokenId: process.env.MODAL_TOKEN_ID!,
-  tokenSecret: process.env.MODAL_TOKEN_SECRET!,
-});
+import { logger, task } from "@trigger.dev/sdk";
 
 export const transcribeAudio = task({
   id: "transcribe-audio",
@@ -39,31 +33,51 @@ export const transcribeAudio = task({
         throw new Error("webhook_url é obrigatório");
       }
 
-      // Chamar função Modal (fire-and-forget)
-      // A função Modal já cuida do webhook, então só precisamos disparar
-      const modalFunction = modal.Function.lookup("whisperx-transcriber", "transcribe_audio");
-
-      // Invocar de forma assíncrona (não aguardar resultado)
-      await modalFunction.spawn({
+      // Preparar dados para Modal
+      const modalPayload = {
         job_id: payload.job_id,
         file_path: payload.file_path,
         file_url: payload.file_url,
         language: payload.language,
         webhook_url: payload.webhook_url,
+      };
+
+      logger.log("Preparando chamada para Modal", { job_id: payload.job_id });
+
+      // Chamar Modal via HTTP (método mais confiável)
+      const modalUrl = process.env.MODAL_WEBHOOK_URL || "https://your-modal-app.modal.run/transcribe";
+
+      const response = await fetch(modalUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.MODAL_TOKEN_SECRET}`,
+        },
+        body: JSON.stringify(modalPayload),
       });
 
-      logger.log("Função Modal disparada com sucesso", { job_id: payload.job_id });
+      if (!response.ok) {
+        throw new Error(`Modal API retornou erro: ${response.status} - ${response.statusText}`);
+      }
+
+      const modalResult = await response.json();
+
+      logger.log("Modal chamado com sucesso", {
+        job_id: payload.job_id,
+        modal_response: modalResult
+      });
 
       return {
         success: true,
         job_id: payload.job_id,
         message: "Transcrição iniciada no Modal",
+        modal_result: modalResult,
       };
 
     } catch (error) {
       logger.error("Erro ao processar transcrição", {
         job_id: payload.job_id,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
 
       // Notificar webhook sobre o erro
@@ -76,12 +90,14 @@ export const transcribeAudio = task({
           body: JSON.stringify({
             job_id: payload.job_id,
             status: 'failed',
-            error_message: error.message,
+            error_message: error instanceof Error ? error.message : String(error),
             message: 'Erro ao iniciar transcrição no Modal'
           }),
         });
       } catch (webhookError) {
-        logger.error("Erro ao notificar webhook", { error: webhookError.message });
+        logger.error("Erro ao notificar webhook", {
+          error: webhookError instanceof Error ? webhookError.message : String(webhookError)
+        });
       }
 
       throw error;

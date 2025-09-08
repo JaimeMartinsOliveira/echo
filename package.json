@@ -1,27 +1,23 @@
 {
-  "name": "echo",
+  "name": "echo-transcription",
   "version": "1.0.0",
-  "description": "",
+  "description": "Transcription API using WhisperX and Trigger.dev",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "npx trigger.dev@latest dev",
+    "build": "npx trigger.dev@latest build",
+    "deploy": "npx trigger.dev@latest deploy"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/JaimeMartinsOliveira/echo.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/JaimeMartinsOliveira/echo/issues"
-  },
-  "homepage": "https://github.com/JaimeMartinsOliveira/echo#readme",
   "dependencies": {
     "@trigger.dev/sdk": "4.0.2",
-    "modal": "^0.3.20"
+    "modal": "0.3.20"
   },
   "devDependencies": {
-    "@trigger.dev/build": "4.0.2"
+    "@types/node": "^20.0.0",
+    "trigger.dev": "4.0.2",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

@@ -26,27 +26,24 @@ async def upload_file(
 ):
     """Upload de arquivo de áudio/vídeo para transcrição"""
 
-    # Validar arquivo
     validation_result = await validate_file(file)
     if not validation_result["valid"]:
         raise HTTPException(status_code=400, detail=validation_result["message"])
 
     try:
-        # Gerar ID único para o job
         job_id = str(uuid.uuid4())
 
         # Salvar arquivo
         file_handler = FileHandler()
         file_path = await file_handler.save_upload(file, job_id)
 
-        # CRÍTICO: Criar registro no banco de dados PRIMEIRO
         db_job = Job(
             id=job_id,
             status=TranscriptionStatus.PENDING,
             file_path=file_path,
             language=language,
             webhook_url=webhook_url,
-            metadata={
+            job_data={
                 "original_filename": file.filename,
                 "file_size": validation_result.get("size", 0),
                 "mime_type": validation_result.get("mime_type", "unknown")
@@ -112,7 +109,7 @@ async def upload_from_url(
             file_url=str(transcription_request.url),
             language=transcription_request.language,
             webhook_url=str(transcription_request.webhook_url) if transcription_request.webhook_url else None,
-            metadata=transcription_request.metadata or {}
+            job_data=transcription_request.metadata or {}
         )
 
         db.add(db_job)
