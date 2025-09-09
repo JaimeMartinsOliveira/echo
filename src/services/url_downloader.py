@@ -1,5 +1,3 @@
-# ARQUIVO: src/services/url_downloader.py
-# CRIAR ESTE ARQUIVO - ele não existe ainda
 import os
 import tempfile
 import yt_dlp

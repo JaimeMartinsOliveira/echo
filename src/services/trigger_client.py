@@ -12,7 +12,7 @@ class TriggerClient:
         if not self.api_key:
             raise ValueError("A variável de ambiente TRIGGER_SECRET_KEY não está definida")
 
-        self.base_url = "https://api.trigger.dev"
+        self.base_url = os.getenv("TRIGGER_API_URL", "https://api.trigger.dev")
         self.task_id = os.getenv("TRIGGER_TASK_ID", "transcribe-audio")
 
         self.client = httpx.AsyncClient(
