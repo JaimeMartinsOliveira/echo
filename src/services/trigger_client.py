@@ -2,6 +2,7 @@ import os
 import logging
 from typing import Optional, Dict, Any
 import httpx
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -9,16 +10,21 @@ logger = logging.getLogger(__name__)
 class TriggerClient:
     def __init__(self):
         self.api_key = os.getenv("TRIGGER_SECRET_KEY")
-        if not self.api_key:
-            raise ValueError("A variável de ambiente TRIGGER_SECRET_KEY não está definida")
+        self.project_id = os.getenv("TRIGGER_PROJECT_ID")
 
-        self.base_url = os.getenv("TRIGGER_API_URL", "https://api.trigger.dev")
-        self.task_id = os.getenv("TRIGGER_TASK_ID", "transcribe-audio")
+        if not self.api_key:
+            raise ValueError("TRIGGER_SECRET_KEY não está definida")
+        if not self.project_id:
+            raise ValueError("TRIGGER_PROJECT_ID não está definida")
+
+        self.base_url = "https://api.trigger.dev"
+        self.task_id = "transcribe-audio"
 
         self.client = httpx.AsyncClient(
             headers={
                 "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "User-Agent": "Echo-Transcription/1.0"
             },
             timeout=30.0
         )
@@ -27,22 +33,21 @@ class TriggerClient:
         """Loga e formata erro HTTP do Trigger.dev"""
         status_code = getattr(e.response, "status_code", "desconhecido")
         try:
-            error_json = e.response.json()
+            error_text = e.response.text if e.response else "sem resposta"
         except Exception:
-            error_json = e.response.text if e.response else "sem resposta"
+            error_text = "erro ao ler resposta"
 
-        logger.error(f"[Trigger.dev] Erro em {context} | Status: {status_code} | Detalhes: {error_json}")
-        raise Exception(f"Erro Trigger.dev em {context}: Status={status_code}, Detalhes={error_json}")
+        logger.error(f"[Trigger.dev] Erro em {context} | Status: {status_code} | Detalhes: {error_text}")
+        raise Exception(f"Erro Trigger.dev em {context}: Status={status_code}")
 
     async def create_transcription_job(
-        self,
-        job_id: str,
-        file_path: Optional[str] = None,
-        file_url: Optional[str] = None,
-        language: str = "auto",
-        webhook_url: Optional[str] = None
+            self,
+            job_id: str,
+            file_path: Optional[str] = None,
+            file_url: Optional[str] = None,
+            language: str = "auto",
+            webhook_url: Optional[str] = None
     ) -> str:
-        """Cria um job de transcrição no Trigger.dev"""
 
         if not (file_path or file_url):
             raise ValueError("É necessário fornecer file_path ou file_url")
@@ -52,49 +57,80 @@ class TriggerClient:
             "language": language,
             "webhook_url": webhook_url or f"{os.getenv('APP_URL')}/webhooks/transcription"
         }
+
         if file_path:
             payload["file_path"] = file_path
         if file_url:
             payload["file_url"] = file_url
 
+        # URLpara trigger de task
+        url = f"{self.base_url}/api/v1/tasks/{self.task_id}/trigger"
+
+        body = {
+            "payload": payload
+        }
+
+        logger.info(f"Criando job no Trigger.dev: {url}")
+        logger.debug(f"Payload: {body}")
+
         try:
-            response = await self.client.post(
-                f"{self.base_url}/v4/tasks/{self.task_id}/run",
-                json=payload
-            )
+            response = await self.client.post(url, json=body)
             response.raise_for_status()
             result = response.json()
-            return result.get("id", "")
+
+            trigger_job_id = result.get("id") or result.get("runId") or result.get("run", {}).get("id", "")
+            logger.info(f"Job criado com sucesso. Trigger ID: {trigger_job_id}")
+
+            return trigger_job_id
+
         except httpx.HTTPError as e:
             await self._handle_error(e, "create_transcription_job")
+            return ""
 
     async def get_job_status(self, trigger_job_id: str) -> Dict[str, Any]:
         """Consulta status de um job pelo ID do Trigger.dev"""
+        url = f"{self.base_url}/api/v1/runs/{trigger_job_id}"
+
         try:
-            response = await self.client.get(f"{self.base_url}/v4/runs/{trigger_job_id}")
+            response = await self.client.get(url)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
             await self._handle_error(e, f"get_job_status({trigger_job_id})")
+            return {}
 
     async def cancel_job(self, trigger_job_id: str) -> bool:
         """Cancela um job em execução"""
+        url = f"{self.base_url}/api/v1/runs/{trigger_job_id}/cancel"
+
         try:
-            response = await self.client.post(f"{self.base_url}/v4/runs/{trigger_job_id}/cancel")
+            response = await self.client.post(url)
             response.raise_for_status()
             return True
         except httpx.HTTPError as e:
             await self._handle_error(e, f"cancel_job({trigger_job_id})")
             return False
 
-    async def get_job_status_by_job_id(self, job_id: str) -> Optional[Dict[str, Any]]:
-        """Consulta status de job pelo job_id do seu sistema (se você armazenar esse mapeamento)"""
+    async def test_connection(self) -> bool:
+        """Testa conexão com Trigger.dev"""
         try:
-            # Aqui você pode implementar lógica para buscar no seu DB/local mapping
-            return None
+            response = await self.client.get(f"{self.base_url}/api/v1/whoami")
+            return response.status_code == 200
         except Exception as e:
-            logger.error(f"Erro ao consultar job por job_id {job_id}: {str(e)}")
-            return None
+            logger.error(f"Erro ao testar conexão: {e}")
+            return False
+
+    async def list_tasks(self) -> Dict[str, Any]:
+        """Lista tasks disponíveis"""
+        url = f"{self.base_url}/api/v1/tasks"
+
+        try:
+            response = await self.client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            await self._handle_error(e, "list_tasks")
+            return {}
 
     async def close(self):
         """Fecha o cliente HTTP"""
