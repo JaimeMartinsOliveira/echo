@@ -24,46 +24,40 @@ async def upload_file(
         language: str = Form(default="auto"),
         webhook_url: Optional[str] = Form(default=None)
 ):
-    """Upload de arquivo de áudio/vídeo para transcrição"""
-
-    validation_result = await validate_file(file)
-    if not validation_result["valid"]:
-        raise HTTPException(status_code=400, detail=validation_result["message"])
-
     try:
         job_id = str(uuid.uuid4())
-
-        # Salvar arquivo
         file_handler = FileHandler()
+
         file_path = await file_handler.save_upload(file, job_id)
+        filename = Path(file_path).name
+
+        app_url = os.getenv("APP_URL")
+        if not app_url:
+            raise HTTPException(status_code=500, detail="APP_URL não está configurada no ambiente.")
+
+        public_file_url = f"{app_url}/uploads/{filename}"
 
         db_job = Job(
             id=job_id,
             status=TranscriptionStatus.PENDING,
             file_path=file_path,
+            file_url=public_file_url,
             language=language,
             webhook_url=webhook_url,
-            job_data={
-                "original_filename": file.filename,
-                "file_size": validation_result.get("size", 0),
-                "mime_type": validation_result.get("mime_type", "unknown")
-            }
         )
-
         db.add(db_job)
         db.commit()
         db.refresh(db_job)
 
-        # Criar job no Trigger
         trigger_client = request.app.state.trigger_client
+
         trigger_job_id = await trigger_client.create_transcription_job(
             job_id=job_id,
-            file_path=file_path,
+            file_url=public_file_url,
             language=language,
             webhook_url=webhook_url
         )
 
-        # CRÍTICO: Atualizar registro com trigger_job_id
         db_job.trigger_job_id = trigger_job_id
         db.commit()
 
