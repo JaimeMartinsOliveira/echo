@@ -21,16 +21,13 @@ image = modal.Image.debian_slim().pip_install([
     "ffmpeg"
 ])
 
-youtube_cookies = modal.Secret.from_name("youtube-cookies")
-
 
 @app.function(
     image=image,
     gpu="T4",
     memory=8192,
-    timeout=1800,
-    retries=3,
-    secrets=[youtube_cookies]
+    timeout=1800,  # 30 minutos
+    retries=3
 )
 def transcribe_gpu_worker(
         job_id: str,
@@ -39,6 +36,7 @@ def transcribe_gpu_worker(
         language: str = "auto",
         webhook_url: Optional[str] = None
 ):
+
     audio_file = None
     try:
         if webhook_url:
@@ -47,7 +45,7 @@ def transcribe_gpu_worker(
         if file_path and os.path.exists(file_path):
             audio_file = file_path
         elif file_url:
-            audio_file = download_audio_from_url(file_url, job_id, youtube_cookies)
+            audio_file = download_audio_from_url(file_url, job_id)
         else:
             raise Exception("Nenhum arquivo ou URL válida fornecida")
 
@@ -106,46 +104,20 @@ def web_accept_job(payload: dict):
     return {"status": "transcription_queued", "job_id": job_id}, 202
 
 
-def download_audio_from_url(url: str, job_id: str, cookies_secret: modal.Secret) -> str:
+def download_audio_from_url(url: str, job_id: str) -> str:
     import yt_dlp
-
     temp_dir = tempfile.mkdtemp()
     output_path = os.path.join(temp_dir, f"{job_id}.%(ext)s")
-
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': str(output_path),
-        'extract_flat': False,
-        'quiet': True,
-    }
-
-    cookie_file_path = None
-    try:
-        cookies_content = cookies_secret["COOKIES_TXT"]
-
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=temp_dir, suffix='.txt') as temp_cookie_file:
-            temp_cookie_file.write(cookies_content)
-            cookie_file_path = temp_cookie_file.name
-
-        ydl_opts['cookiefile'] = cookie_file_path
-
-    except (KeyError, FileNotFoundError):
-        print("Segredo 'youtube-cookies' ou chave 'COOKIES_TXT' não encontrados. A tentar sem cookies.")
-
+    ydl_opts = {'format': 'bestaudio/best', 'outtmpl': output_path, 'extract_flat': False, 'quiet': True}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
-
-    if cookie_file_path and os.path.exists(cookie_file_path):
-        os.remove(cookie_file_path)
-
     for file in os.listdir(temp_dir):
         if file.startswith(job_id):
             return os.path.join(temp_dir, file)
-
     raise Exception("Falha ao baixar arquivo da URL")
 
 
-def notify_webhook(webhook_url: str, job_id: str, status: str, message: str, result: Optional[Dict, Any] = None):
+def notify_webhook(webhook_url: str, job_id: str, status: str, message: str, result: Optional[Dict[str, Any]] = None):
     try:
         payload = {"job_id": job_id, "status": status, "message": message}
         if result:
