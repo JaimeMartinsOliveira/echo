@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import uvicorn
 from src.api.routes import upload, transcription, webhooks
@@ -43,8 +42,6 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
-
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
