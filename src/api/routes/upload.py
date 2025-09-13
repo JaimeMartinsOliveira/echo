@@ -5,6 +5,7 @@ from typing import Optional
 import uuid
 import os
 from datetime import datetime
+import logging
 from ...services.file_handler import FileHandler
 from ...services.trigger_client import TriggerClient
 from ...models.transcription import TranscriptionRequest, TranscriptionResponse, TranscriptionStatus
@@ -14,6 +15,7 @@ from ...database.connection import get_db
 from ...database.models import Job
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/upload/file", response_model=TranscriptionResponse)
@@ -26,21 +28,34 @@ async def upload_file(
 ):
     """Upload de arquivo de áudio/vídeo para transcrição"""
 
+    logger.info(f"Recebido upload: {file.filename}, tamanho: {file.size}")
+
+    # Validar arquivo
     validation_result = await validate_file(file)
     if not validation_result["valid"]:
+        logger.error(f"Arquivo inválido: {validation_result['message']}")
         raise HTTPException(status_code=400, detail=validation_result["message"])
 
-    try:
-        job_id = str(uuid.uuid4())
+    job_id = str(uuid.uuid4())
+    file_path = None
 
-        # Salvar arquivo
+    try:
+        logger.info(f"[{job_id}] Processando upload do arquivo: {file.filename}")
+
+        # Salvar arquivo PRIMEIRO
         file_handler = FileHandler()
         file_path = await file_handler.save_upload(file, job_id)
+        logger.info(f"[{job_id}] Arquivo salvo em: {file_path}")
 
+        # Verificar se arquivo foi realmente salvo
+        if not os.path.exists(file_path):
+            raise Exception(f"Falha ao salvar arquivo em: {file_path}")
+
+        # Criar registro no banco de dados
         db_job = Job(
             id=job_id,
             status=TranscriptionStatus.PENDING,
-            file_path=file_path,
+            file_path=file_path,  # Arquivo local
             language=language,
             webhook_url=webhook_url,
             job_data={
@@ -53,17 +68,20 @@ async def upload_file(
         db.add(db_job)
         db.commit()
         db.refresh(db_job)
+        logger.info(f"[{job_id}] Job criado no banco de dados")
 
-        # Criar job no Trigger
+        # Criar job no Trigger - PASSAR O CAMINHO DO ARQUIVO
         trigger_client = request.app.state.trigger_client
         trigger_job_id = await trigger_client.create_transcription_job(
             job_id=job_id,
-            file_path=file_path,
+            file_path=file_path,  # Passar caminho do arquivo local
             language=language,
-            webhook_url=webhook_url
+            webhook_url=webhook_url or f"{os.getenv('APP_URL', 'http://localhost:8000')}/webhooks/transcription"
         )
 
-        # CRÍTICO: Atualizar registro com trigger_job_id
+        logger.info(f"[{job_id}] Job criado no Trigger com ID: {trigger_job_id}")
+
+        # Atualizar registro com trigger_job_id
         db_job.trigger_job_id = trigger_job_id
         db.commit()
 
@@ -75,11 +93,20 @@ async def upload_file(
         )
 
     except Exception as e:
+        logger.error(f"[{job_id}] Erro no upload: {str(e)}")
+
         # Rollback em caso de erro
         db.rollback()
+
         # Limpar arquivo se foi salvo
-        if 'file_path' in locals():
-            file_handler.delete_file(file_path)
+        if file_path and os.path.exists(file_path):
+            try:
+                file_handler = FileHandler()
+                await file_handler.delete_file(file_path)
+                logger.info(f"[{job_id}] Arquivo removido após erro: {file_path}")
+            except Exception as cleanup_error:
+                logger.warning(f"[{job_id}] Erro ao limpar arquivo: {cleanup_error}")
+
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 
@@ -94,19 +121,24 @@ async def upload_from_url(
     if not transcription_request.url:
         raise HTTPException(status_code=400, detail="URL é obrigatória")
 
+    url_str = str(transcription_request.url)
+    logger.info(f"Recebida URL para transcrição: {url_str}")
+
     # Validar URL
-    if not await validate_url(str(transcription_request.url)):
+    if not await validate_url(url_str):
+        logger.error(f"URL inválida ou inacessível: {url_str}")
         raise HTTPException(status_code=400, detail="URL inválida ou inacessível")
 
-    try:
-        # Gerar ID único para o job
-        job_id = str(uuid.uuid4())
+    job_id = str(uuid.uuid4())
 
-        # CRÍTICO: Criar registro no banco de dados PRIMEIRO
+    try:
+        logger.info(f"[{job_id}] Criando job para URL: {url_str}")
+
+        # Criar registro no banco de dados
         db_job = Job(
             id=job_id,
             status=TranscriptionStatus.PENDING,
-            file_url=str(transcription_request.url),
+            file_url=url_str,  # URL externa
             language=transcription_request.language,
             webhook_url=str(transcription_request.webhook_url) if transcription_request.webhook_url else None,
             job_data=transcription_request.metadata or {}
@@ -115,17 +147,21 @@ async def upload_from_url(
         db.add(db_job)
         db.commit()
         db.refresh(db_job)
+        logger.info(f"[{job_id}] Job criado no banco de dados para URL")
 
-        # Criar job no Trigger
+        # Criar job no Trigger - PASSAR A URL
         trigger_client = request.app.state.trigger_client
         trigger_job_id = await trigger_client.create_transcription_job(
             job_id=job_id,
-            file_url=str(transcription_request.url),
+            file_url=url_str,  # Passar URL
             language=transcription_request.language,
-            webhook_url=str(transcription_request.webhook_url) if transcription_request.webhook_url else None
+            webhook_url=str(
+                transcription_request.webhook_url) if transcription_request.webhook_url else f"{os.getenv('APP_URL', 'http://localhost:8000')}/webhooks/transcription"
         )
 
-        # CRÍTICO: Atualizar registro com trigger_job_id
+        logger.info(f"[{job_id}] Job criado no Trigger com ID: {trigger_job_id}")
+
+        # Atualizar registro com trigger_job_id
         db_job.trigger_job_id = trigger_job_id
         db.commit()
 
@@ -137,6 +173,7 @@ async def upload_from_url(
         )
 
     except Exception as e:
+        logger.error(f"[{job_id}] Erro ao processar URL: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
