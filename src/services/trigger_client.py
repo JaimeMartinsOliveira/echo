@@ -1,5 +1,6 @@
 import os
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Any
 import httpx
 import json
@@ -49,43 +50,50 @@ class TriggerClient:
             webhook_url: Optional[str] = None
     ) -> str:
 
+        final_webhook_url = webhook_url or f"{os.getenv('APP_URL')}/webhooks/transcription"
+
         if not (file_path or file_url):
             raise ValueError("É necessário fornecer file_path ou file_url")
 
         payload: Dict[str, Any] = {
             "job_id": job_id,
             "language": language,
-            "webhook_url": webhook_url or f"{os.getenv('APP_URL')}/webhooks/transcription"
+            "webhook_url": final_webhook_url
         }
 
         if file_path:
-            payload["file_path"] = file_path
-        if file_url:
+            app_url = os.getenv("APP_URL")
+            if not app_url:
+                raise ValueError("APP_URL não está configurada para construir a URL do ficheiro de upload")
+
+            filename = Path(file_path).name
+
+            public_file_url = f"{app_url}/uploads/{filename}"
+            payload["file_url"] = public_file_url
+        else:
             payload["file_url"] = file_url
 
-        # URLpara trigger de task
         url = f"{self.base_url}/api/v1/tasks/{self.task_id}/trigger"
 
         body = {
             "payload": payload
         }
 
-        logger.info(f"Criando job no Trigger.dev: {url}")
-        logger.debug(f"Payload: {body}")
+        logger.info(f"Enviando para Trigger.dev. URL: {url}, Payload para o worker: {payload}")
 
         try:
             response = await self.client.post(url, json=body)
             response.raise_for_status()
             result = response.json()
-
-            trigger_job_id = result.get("id") or result.get("runId") or result.get("run", {}).get("id", "")
-            logger.info(f"Job criado com sucesso. Trigger ID: {trigger_job_id}")
-
+            trigger_job_id = result.get("id")
+            if not trigger_job_id:
+                raise Exception("Trigger.dev não retornou um ID de run")
             return trigger_job_id
-
         except httpx.HTTPError as e:
-            await self._handle_error(e, "create_transcription_job")
-            return ""
+            status_code = getattr(e.response, "status_code", "desconhecido")
+            error_text = e.response.text if e.response else "sem resposta"
+            logger.error(f"[Trigger.dev] Erro | Status: {status_code} | Detalhes: {error_text}")
+            raise Exception(f"Erro Trigger.dev: Status={status_code}")
 
     async def get_job_status(self, trigger_job_id: str) -> Dict[str, Any]:
         """Consulta status de um job pelo ID do Trigger.dev"""
