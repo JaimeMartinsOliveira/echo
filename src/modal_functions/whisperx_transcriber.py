@@ -24,11 +24,11 @@ image = (
     )
     .pip_install([
         "whisperx==3.4.2",
-        "torch==2.5.1",
-        "torchaudio==2.5.1",
+        "torch==2.7.1",
+        "torchaudio==2.7.1",
         "pyannote.audio==3.4.0",
         "faster-whisper>=1.1.1",
-        "transformers>=4.48.0",
+        "transformers>=4.56.1",
         "numpy>=1.26.4",
         "ffmpeg-python",
         "httpx",
