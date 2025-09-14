@@ -14,19 +14,27 @@ logger = logging.getLogger(__name__)
 app = modal.App("whisperx-transcriber")
 
 
-image = modal.Image.debian_slim().pip_install([
-    "whisperx==3.4.2",
-    "faster-whisper>=1.1.1",
-    "torch>=2.5.1",
-    "torchaudio>=2.5.1",
-    "transformers>=4.48.0",
-    "numpy>=2.0.2",
-    "ffmpeg-python",
-    "httpx",
-    "fastapi"
-]).apt_install([
-    "ffmpeg"
-])
+image = (
+    modal.Image.from_registry("nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04")
+    .apt_install(
+        "python3",
+        "python3-pip",
+        "ffmpeg",
+        "python-is-python3"
+    )
+    .pip_install([
+        "whisperx==3.4.2",
+        "torch==2.5.1",
+        "torchaudio==2.5.1",
+        "pyannote.audio==3.4.0",
+        "faster-whisper>=1.1.1",
+        "transformers>=4.48.0",
+        "numpy>=1.26.4",
+        "ffmpeg-python",
+        "httpx",
+        "fastapi",
+    ])
+)
 
 @app.function(
     image=image,
